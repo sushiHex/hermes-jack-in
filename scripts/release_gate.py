@@ -533,7 +533,7 @@ def _exercise_install(
     run([guard, "--help"], cwd=temp_root, env=env)
     run([isolated_python, "-I", "-m", "hermes_jack_in", "--help"], cwd=temp_root, env=env)
 
-    fixture = temp_root / f"installed-{label}"
+    fixture = (temp_root / f"installed-{label}").resolve()
     source = fixture / "source" / "demo"
     destination = fixture / "destination"
     source.mkdir(parents=True)

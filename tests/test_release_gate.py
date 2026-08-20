@@ -128,6 +128,7 @@ def test_release_gate_checks_lock_before_frozen_sync() -> None:
 def test_release_gate_guard_canary_uses_physical_root_and_expected_reason() -> None:
     source = RELEASE_GATE.read_text(encoding="utf-8")
 
+    assert 'fixture = (temp_root / f"installed-{label}").resolve()' in source
     assert "source_root = source.parent.resolve(strict=True)" in source
     assert '"skill trees are protected"' in source
 
