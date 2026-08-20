@@ -1,0 +1,13 @@
+{
+  "skills": {
+    "alpha": {
+      "artifact_hash": "9d5447671a0b186aa3522c5c95f3d57570341f3e2fdb1bc676c83f62399e3caf",
+      "classification": "directly-portable",
+      "mode": "copy-fallback",
+      "source": "one/alpha",
+      "source_hash": "5db74e16752f477798ef4f46690c92d18007a8a92ab8fcb61a4b0552b0a074ed"
+    }
+  },
+  "source": "<SOURCE>",
+  "version": 1
+}

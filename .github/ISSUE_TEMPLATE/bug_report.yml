@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible defect in Hermes Jack-In
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report vulnerabilities or include credentials, private skill contents, or personal paths here. Follow SECURITY.md for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: Hermes Jack-In version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Other or unsupported
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use temporary, sanitized source and destination trees.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include command, exit status, and JSON error. Remove private paths and skill content.

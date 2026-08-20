@@ -1,0 +1,12 @@
+# Copy this file before adding reviewed, per-skill semantic adaptations.
+# Every named skill must exist in the scanned source, so the shipped example is
+# intentionally empty and safe for any library.
+skills: {}
+
+# Example shape:
+# skills:
+#   example-skill:
+#     classification: semantic-adaptation
+#     replacements:
+#       - from: "Exact Hermes-only source text"
+#         to: "Reviewed Claude Code equivalent"
