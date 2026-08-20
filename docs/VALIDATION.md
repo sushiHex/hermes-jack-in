@@ -25,8 +25,8 @@ A version is releasable only when:
 Version `0.1.0` is prepared as a source-only GitHub prerelease. No package is
 published to PyPI and no wheel or sdist is attached to the release. The release
 body is the authoritative dynamic evidence record: it must identify the exact
-tag target, local gate result, main and tag CI URLs with all 15 native matrix
-jobs passing, signed-tag verification, and reproducible artifact hashes.
+tag target, local gate result, main and tag CI URLs with every declared native
+matrix job passing, signed-tag verification, and reproducible artifact hashes.
 
 | Evidence | Windows | Linux | macOS |
 |---|---|---|---|

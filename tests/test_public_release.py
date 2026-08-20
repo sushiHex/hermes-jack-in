@@ -134,7 +134,9 @@ def test_ci_uses_immutable_action_commits_and_qualifies_tags() -> None:
 def test_changelog_records_the_v010_prerelease() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-    assert "## [Unreleased]\n\n## [0.1.0] - 2026-08-19" in changelog
+    assert changelog.index("## [Unreleased]") < changelog.index(
+        "## [0.1.0] - 2026-08-19"
+    )
     assert "[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.1.0...HEAD" in changelog
     assert "[0.1.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.1.0" in changelog
 
@@ -142,13 +144,22 @@ def test_changelog_records_the_v010_prerelease() -> None:
 def test_release_docs_define_a_source_only_github_prerelease() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     releasing = (ROOT / "docs/RELEASING.md").read_text(encoding="utf-8")
+    workflows = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / ".github/workflows").glob("*.y*ml"))
+    ).lower()
 
+    assert "uv tool install git+https://github.com/sushiHex/hermes-jack-in.git\n" in readme
     assert "git+https://github.com/sushiHex/hermes-jack-in.git@v0.1.0" in readme
     assert "source-only GitHub prerelease" in readme
     assert "No package has been published to PyPI" in readme
     assert "source-only GitHub prerelease" in releasing
     assert "No wheel or sdist release assets" in releasing
     assert "Do not publish to PyPI" in releasing
+    assert "uv publish" not in workflows
+    assert "twine upload" not in workflows
+    assert "gh release upload" not in workflows
+    assert "pypa/gh-action-pypi-publish" not in workflows
 
 
 def test_private_release_evidence_is_not_present() -> None:
