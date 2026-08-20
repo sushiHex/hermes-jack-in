@@ -88,22 +88,25 @@ def test_public_governance_and_ci_files_exist() -> None:
     assert (ROOT / "docs/VALIDATION.md").is_file()
 
 
-def test_dependabot_covers_actions_uv_and_build_constraints() -> None:
+def test_dependabot_covers_actions_and_uv_without_duplicate_python_updates() -> None:
     dependabot = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
 
     assert "package-ecosystem: github-actions" in dependabot
     assert "package-ecosystem: uv" in dependabot
-    assert "package-ecosystem: pip" in dependabot
+    assert "package-ecosystem: pip" not in dependabot
 
 
 def test_ci_uses_immutable_action_commits_and_qualifies_tags() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    uses = re.findall(r"^\s*uses:\s*[^@\s]+@([^\s#]+)", workflow, flags=re.MULTILINE)
+    uses = re.findall(
+        r"^\s*uses:\s*([^@\s]+)@([^\s#]+)",
+        workflow,
+        flags=re.MULTILINE,
+    )
 
     assert uses
-    assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
-    assert "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in workflow
-    assert "astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e" in workflow
+    assert {action for action, _ in uses} == {"actions/checkout", "astral-sh/setup-uv"}
+    assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for _, revision in uses)
     assert 'tags: ["v*"]' in workflow
     lock_check = workflow.index("run: uv lock --check")
     frozen_sync = workflow.index("run: uv sync --frozen")
