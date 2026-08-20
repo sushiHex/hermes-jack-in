@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 try:
     import tomllib
@@ -89,24 +90,41 @@ def test_public_governance_and_ci_files_exist() -> None:
 
 
 def test_dependabot_covers_actions_and_uv_without_duplicate_python_updates() -> None:
-    dependabot = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    dependabot = yaml.safe_load(
+        (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    )
 
-    assert "package-ecosystem: github-actions" in dependabot
-    assert "package-ecosystem: uv" in dependabot
-    assert "package-ecosystem: pip" not in dependabot
+    assert {update["package-ecosystem"] for update in dependabot["updates"]} == {
+        "github-actions",
+        "uv",
+    }
 
 
 def test_ci_uses_immutable_action_commits_and_qualifies_tags() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    uses = re.findall(
-        r"^\s*uses:\s*([^@\s]+)@([^\s#]+)",
-        workflow,
-        flags=re.MULTILINE,
-    )
+    workflow_paths = sorted((ROOT / ".github/workflows").glob("*.y*ml"))
+    uses = [
+        value
+        for path in workflow_paths
+        for value in re.findall(
+            r"^\s*uses:\s*([^\s#]+)",
+            path.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        )
+    ]
 
     assert uses
-    assert {action for action, _ in uses} == {"actions/checkout", "astral-sh/setup-uv"}
-    assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for _, revision in uses)
+    assert all(
+        re.fullmatch(
+            r"(?:actions/checkout|astral-sh/setup-uv)@[0-9a-f]{40}",
+            value,
+        )
+        for value in uses
+    )
+    assert {value.split("@", maxsplit=1)[0] for value in uses} == {
+        "actions/checkout",
+        "astral-sh/setup-uv",
+    }
     assert 'tags: ["v*"]' in workflow
     lock_check = workflow.index("run: uv lock --check")
     frozen_sync = workflow.index("run: uv sync --frozen")
