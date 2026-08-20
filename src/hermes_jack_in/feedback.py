@@ -51,18 +51,31 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 def _open_posix_parent(path: Path) -> tuple[int | None, object | None]:
     if os.name == "nt":
         return None, None
+    directory = path.parent
+    parts = directory.parts
+    if not directory.is_absolute() or not parts:
+        raise AdapterError(f"path parent is not absolute: {directory}")
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
     flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
     try:
-        descriptor = os.open(path.parent, flags)
-    except OSError as exc:
-        raise AdapterError(f"path parent could not be pinned: {path.parent}") from exc
-    identity = _identity_from_stat(os.fstat(descriptor))
-    if not stat.S_ISDIR(os.fstat(descriptor).st_mode) or not _identity_matches(
-        path.parent, identity
-    ):
-        os.close(descriptor)
-        raise AdapterError(f"path parent changed before it could be pinned: {path.parent}")
+        descriptor = os.open(parts[0], flags)
+        for component in parts[1:]:
+            if component in {"", ".", ".."}:
+                raise AdapterError(f"path parent has an unsafe component: {directory}")
+            child = os.open(component, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        metadata = os.fstat(descriptor)
+        identity = _identity_from_stat(metadata)
+        if not stat.S_ISDIR(metadata.st_mode) or not _identity_matches(directory, identity):
+            raise AdapterError(f"path parent changed before it could be pinned: {directory}")
+    except BaseException as exc:
+        if descriptor is not None:
+            os.close(descriptor)
+        if isinstance(exc, AdapterError):
+            raise
+        raise AdapterError(f"path parent could not be pinned: {directory}") from exc
     return descriptor, identity
 
 
