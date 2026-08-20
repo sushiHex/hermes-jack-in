@@ -29,4 +29,9 @@ All notable changes to Hermes Jack-In are documented here. The project follows
   destination with no entries, including when source skills remain present but
   are all excluded without their reviewed semantic overrides.
 
+### Changed
+
+- Keep GitHub Actions on reviewed Node 24 releases while retaining immutable
+  full-SHA pins, and use one `uv` Dependabot stream for Python dependencies.
+
 [Unreleased]: https://github.com/sushiHex/hermes-jack-in/commits/main

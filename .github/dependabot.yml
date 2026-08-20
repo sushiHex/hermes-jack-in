@@ -10,12 +10,3 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-  - package-ecosystem: pip
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    ignore:
-      - dependency-name: PyYAML
-      - dependency-name: pytest
-      - dependency-name: ruff
