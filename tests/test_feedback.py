@@ -473,6 +473,38 @@ def test_feedback_rejects_input_symlink(tmp_path: Path) -> None:
     assert not output_path.exists()
 
 
+@pytest.mark.parametrize("alias_target", ["input", "output"])
+def test_posix_feedback_paths_reject_symlinked_ancestor(
+    tmp_path: Path,
+    alias_target: str,
+) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX component-by-component no-follow test")
+
+    from hermes_jack_in.feedback import propose_feedback
+    from hermes_jack_in.sync import AdapterError
+
+    source, destination = _installed_projection(tmp_path)
+    actual_parent = tmp_path / "actual-parent"
+    actual_parent.mkdir()
+    alias_parent = tmp_path / "alias-parent"
+    alias_parent.symlink_to(actual_parent, target_is_directory=True)
+    ordinary_input = tmp_path / "feedback.json"
+    ordinary_input.write_bytes(_feedback_bytes())
+    input_path = ordinary_input
+    output_path = tmp_path / "proposal.json"
+    if alias_target == "input":
+        (actual_parent / "feedback.json").write_bytes(_feedback_bytes())
+        input_path = alias_parent / "feedback.json"
+    else:
+        output_path = alias_parent / "proposal.json"
+
+    with pytest.raises(AdapterError):
+        propose_feedback(source, destination, input_path, output_path)
+
+    assert not (actual_parent / "proposal.json").exists()
+
+
 def test_feedback_rejects_input_replacement_between_lstat_and_open(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
