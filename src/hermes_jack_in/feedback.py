@@ -48,23 +48,69 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _open_posix_parent(path: Path) -> tuple[int | None, object | None]:
+    if os.name == "nt":
+        return None, None
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path.parent, flags)
+    except OSError as exc:
+        raise AdapterError(f"path parent could not be pinned: {path.parent}") from exc
+    identity = _identity_from_stat(os.fstat(descriptor))
+    if not stat.S_ISDIR(os.fstat(descriptor).st_mode) or not _identity_matches(
+        path.parent, identity
+    ):
+        os.close(descriptor)
+        raise AdapterError(f"path parent changed before it could be pinned: {path.parent}")
+    return descriptor, identity
+
+
+def _relative_identity_matches(parent: int, name: str, identity: object) -> bool:
+    try:
+        metadata = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    except OSError:
+        return False
+    return _identity_from_stat(metadata) == identity
+
+
 def _read_bounded_file(path: Path) -> bytes:
     path = Path(path).absolute()
+    with _pinned_physical_directory(path.parent, create_missing=False):
+        return _read_bounded_file_from_pinned_path(path)
+
+
+def _read_bounded_file_from_pinned_path(path: Path) -> bytes:
+    parent, parent_identity = _open_posix_parent(path)
     try:
-        metadata = path.lstat()
+        metadata = (
+            path.lstat()
+            if parent is None
+            else os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        )
     except OSError as exc:
+        if parent is not None:
+            os.close(parent)
         raise AdapterError(f"feedback input is not a readable regular file: {path}") from exc
     reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     attributes = getattr(metadata, "st_file_attributes", 0)
-    if path.is_symlink() or bool(reparse_flag and attributes & reparse_flag):
+    if stat.S_ISLNK(metadata.st_mode) or bool(reparse_flag and attributes & reparse_flag):
+        if parent is not None:
+            os.close(parent)
         raise AdapterError(f"feedback input is not a regular file: {path}")
     expected_identity = _identity_from_stat(metadata)
     flags = os.O_RDONLY
     flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOINHERIT", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     try:
-        descriptor = os.open(path, flags)
+        descriptor = (
+            os.open(path, flags)
+            if parent is None
+            else os.open(path.name, flags, dir_fd=parent)
+        )
     except OSError as exc:
+        if parent is not None:
+            os.close(parent)
         raise AdapterError(f"feedback input is not a readable regular file: {path}") from exc
     try:
         metadata = os.fstat(descriptor)
@@ -85,9 +131,17 @@ def _read_bounded_file(path: Path) -> bytes:
         contents = b"".join(chunks)
         if len(contents) > MAX_FEEDBACK_BYTES:
             raise AdapterError(f"feedback input exceeds {MAX_FEEDBACK_BYTES} bytes")
+        if parent is not None and (
+            parent_identity is None
+            or not _identity_matches(path.parent, parent_identity)
+            or not _relative_identity_matches(parent, path.name, expected_identity)
+        ):
+            raise AdapterError(f"feedback input changed while it was read: {path}")
         return contents
     finally:
         os.close(descriptor)
+        if parent is not None:
+            os.close(parent)
 
 
 def _strict_text(value: Any, field: str, limit: int) -> str:
@@ -161,18 +215,46 @@ def _canonical_bytes(payload: Mapping[str, Any]) -> bytes:
 
 
 def _write_new_file(path: Path, contents: bytes) -> None:
+    parent, parent_identity = _open_posix_parent(path)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOINHERIT", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     try:
-        descriptor = os.open(path, flags, 0o600)
+        descriptor = (
+            os.open(path, flags, 0o600)
+            if parent is None
+            else os.open(path.name, flags, 0o600, dir_fd=parent)
+        )
     except FileExistsError as exc:
+        if parent is not None:
+            os.close(parent)
         raise AdapterError(f"refusing to overwrite proposal output: {path}") from exc
     except OSError as exc:
+        if parent is not None:
+            os.close(parent)
         raise AdapterError(f"unable to create proposal output: {path}") from exc
     identity = _identity_from_stat(os.fstat(descriptor))
+
+    def path_still_owns_output() -> bool:
+        if parent is None:
+            return _identity_matches(path, identity)
+        return (
+            parent_identity is not None
+            and _identity_matches(path.parent, parent_identity)
+            and _relative_identity_matches(parent, path.name, identity)
+            and _identity_matches(path, identity)
+        )
+
+    def remove_owned_output() -> None:
+        if parent is None:
+            if _identity_matches(path, identity):
+                path.unlink()
+            return
+        if _relative_identity_matches(parent, path.name, identity):
+            os.unlink(path.name, dir_fd=parent)
+
     try:
-        if not _identity_matches(path, identity):
+        if not path_still_owns_output():
             raise OSError("proposal output identity changed before write")
         view = memoryview(contents)
         while view:
@@ -181,13 +263,14 @@ def _write_new_file(path: Path, contents: bytes) -> None:
                 raise OSError("proposal output write made no progress")
             view = view[written:]
         os.fsync(descriptor)
-        if not _identity_matches(path, identity):
+        if not path_still_owns_output():
             raise OSError("proposal output identity changed during write")
     except BaseException as exc:
         try:
             os.close(descriptor)
-            if _identity_matches(path, identity):
-                path.unlink()
+            remove_owned_output()
+            if parent is not None:
+                os.close(parent)
         except BaseException as cleanup_error:
             raise exc.with_traceback(exc.__traceback__) from cleanup_error
         if not isinstance(exc, Exception):
@@ -195,6 +278,8 @@ def _write_new_file(path: Path, contents: bytes) -> None:
         raise AdapterError(f"proposal output write failed: {path}") from exc
     else:
         os.close(descriptor)
+        if parent is not None:
+            os.close(parent)
 
 
 def _projection_payload(identity: ProjectionIdentity) -> dict[str, str]:

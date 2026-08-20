@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -199,7 +200,17 @@ def test_feedback_input_rejects_oversized_bytes_and_strings(tmp_path: Path) -> N
     assert not output_path.exists()
 
 
-@pytest.mark.parametrize("drift", ["source", "destination", "unowned"])
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "source",
+        "destination",
+        "unowned",
+        "stale-output",
+        "missing-output",
+        "desired-output-changed",
+    ],
+)
 def test_feedback_rejects_projection_drift_without_output(tmp_path: Path, drift: str) -> None:
     from hermes_jack_in.feedback import propose_feedback
     from hermes_jack_in.sync import AdapterError
@@ -212,8 +223,35 @@ def test_feedback_rejects_projection_drift_without_output(tmp_path: Path, drift:
         )
     elif drift == "destination":
         (destination / "plain" / "SKILL.md").write_text("changed\n", encoding="utf-8")
-    else:
+    elif drift == "unowned":
         write_skill(source, "research/new", "name: new\ndescription: New.")
+    elif drift == "stale-output":
+        (source / "research" / "plain").rename(tmp_path / "held-source")
+    elif drift == "missing-output":
+        (destination / "plain").rename(tmp_path / "held-output")
+    else:
+        from hermes_jack_in.sync import MANIFEST_NAME
+
+        manifest_path = destination / MANIFEST_NAME
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["skills"]["plain"]["desired_output_identity"] = "v1:" + "0" * 64
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    input_path = tmp_path / "feedback.json"
+    output_path = tmp_path / "proposal.json"
+    input_path.write_bytes(_feedback_bytes())
+
+    with pytest.raises(AdapterError, match="projection check failed"):
+        propose_feedback(source, destination, input_path, output_path)
+
+    assert not output_path.exists()
+
+
+def test_feedback_rejects_a_missing_ownership_manifest_without_output(tmp_path: Path) -> None:
+    from hermes_jack_in.feedback import propose_feedback
+    from hermes_jack_in.sync import MANIFEST_NAME, AdapterError
+
+    source, destination = _installed_projection(tmp_path)
+    (destination / MANIFEST_NAME).rename(tmp_path / "held-manifest.json")
     input_path = tmp_path / "feedback.json"
     output_path = tmp_path / "proposal.json"
     input_path.write_bytes(_feedback_bytes())
@@ -330,6 +368,42 @@ def test_feedback_refuses_overwrite_without_modifying_existing_bytes(tmp_path: P
         propose_feedback(source, destination, input_path, output_path)
 
     assert output_path.read_bytes() == b"existing\n"
+
+
+def test_posix_output_parent_replacement_does_not_redirect_write(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX directory-descriptor authority test")
+
+    import hermes_jack_in.feedback as feedback_module
+
+    parent = tmp_path / "review"
+    moved_parent = tmp_path / "moved-review"
+    protected = tmp_path / "protected"
+    parent.mkdir()
+    protected.mkdir()
+    output_path = parent / "proposal.json"
+    original_match = feedback_module._identity_matches
+    replaced = False
+
+    def replace_after_parent_check(path, identity) -> bool:
+        nonlocal replaced
+        matches = original_match(path, identity)
+        if path == parent and matches and not replaced:
+            parent.rename(moved_parent)
+            parent.symlink_to(protected, target_is_directory=True)
+            replaced = True
+        return matches
+
+    monkeypatch.setattr(feedback_module, "_identity_matches", replace_after_parent_check)
+
+    with pytest.raises(feedback_module.AdapterError, match="write"):
+        feedback_module._write_new_file(output_path, b"review only\n")
+
+    assert not (protected / "proposal.json").exists()
+    assert not (moved_parent / "proposal.json").exists()
 
 
 def test_equivalent_feedback_key_order_produces_identical_bytes(tmp_path: Path) -> None:
