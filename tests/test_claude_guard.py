@@ -173,6 +173,10 @@ def test_guard_canonicalizes_windows_short_aliases_before_comparison(
         return physical if path == alias else path
 
     monkeypatch.setattr(guard, "_windows_long_path", expand_alias)
+    canonical, spellings, _ = guard._protected_root_data((alias,))
+    assert canonical == (physical.as_posix().lower(),)
+    assert alias.as_posix().lower() in spellings
+
     decision = guard.evaluate(
         {
             "tool_name": "Bash",

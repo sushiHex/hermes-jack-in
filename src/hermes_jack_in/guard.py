@@ -137,7 +137,7 @@ def _validated_guard_roots(roots: tuple[str | Path, ...]) -> tuple[Path, ...]:
         if identity in identities:
             raise ValueError("protected roots must be unique")
         identities.add(identity)
-        validated.append(resolved)
+        validated.append(unresolved)
     return tuple(validated)
 
 
@@ -476,16 +476,18 @@ def _protected_root_data(
             raise ValueError(f"protected root must be absolute: {raw_root}")
         key = _path_key(path)
         canonical.append(key)
-        spellings.add(key)
-        drive = re.match(r"^([a-z]):/(.+)$", key)
-        if drive:
-            spellings.add(f"/{drive.group(1)}/{drive.group(2)}")
-        named_home = re.match(r"^[a-z]:/users/([^/]+)/(.+)$", key)
-        if named_home:
-            spellings.add(f"~{named_home.group(1)}/{named_home.group(2)}")
-        parts = tuple(part for part in key.strip("/").split("/") if part)
-        for index in range(max(0, len(parts) - 6), len(parts) - 1):
-            fragments.add("/".join(parts[index:]))
+        raw_key = path.absolute().as_posix().lower().rstrip("/")
+        for spelling in dict.fromkeys((key, raw_key)):
+            spellings.add(spelling)
+            drive = re.match(r"^([a-z]):/(.+)$", spelling)
+            if drive:
+                spellings.add(f"/{drive.group(1)}/{drive.group(2)}")
+            named_home = re.match(r"^[a-z]:/users/([^/]+)/(.+)$", spelling)
+            if named_home:
+                spellings.add(f"~{named_home.group(1)}/{named_home.group(2)}")
+            parts = tuple(part for part in spelling.strip("/").split("/") if part)
+            for index in range(max(0, len(parts) - 6), len(parts) - 1):
+                fragments.add("/".join(parts[index:]))
     return tuple(canonical), tuple(sorted(spellings)), tuple(sorted(fragments))
 
 
