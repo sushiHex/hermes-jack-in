@@ -160,6 +160,30 @@ def test_guard_main_denies_bash_when_root_validation_raises(
     ].lower()
 
 
+def test_guard_canonicalizes_windows_short_aliases_before_comparison(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard = load_guard()
+    physical = tmp_path / "runneradmin" / "source"
+    physical.mkdir(parents=True)
+    alias = tmp_path / "RUNNER~1" / "source"
+
+    def expand_alias(path: Path) -> Path:
+        return physical if path == alias else path
+
+    monkeypatch.setattr(guard, "_windows_long_path", expand_alias)
+    decision = guard.evaluate(
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": f'rm -rf -- "{alias.as_posix()}"'},
+        },
+        protected_roots=(physical,),
+    )
+
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_guard_denies_native_and_posix_canonical_paths() -> None:
     guard = load_guard()
 
@@ -563,6 +587,9 @@ def test_guide_locks_exact_literal_guard_exemptions() -> None:
 def test_guard_allows_unrelated_bash_and_non_bash_tools(tmp_path: Path) -> None:
     guard = load_guard()
     protected_roots = (tmp_path / "source", tmp_path / "destination")
+
+    def _evaluate(_guard, event):
+        return guard.evaluate(event, protected_roots=protected_roots)
 
     assert (
         guard.evaluate(

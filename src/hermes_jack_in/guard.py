@@ -69,6 +69,41 @@ def _host_path(raw: str) -> Path:
     return Path(normalized)
 
 
+def _windows_long_path(path: Path) -> Path:
+    """Expand an existing Windows 8.3 alias without changing other platforms."""
+    if os.name != "nt":
+        return path
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        get_long_path_name = ctypes.WinDLL("kernel32", use_last_error=True).GetLongPathNameW
+        get_long_path_name.argtypes = (
+            wintypes.LPCWSTR,
+            wintypes.LPWSTR,
+            wintypes.DWORD,
+        )
+        get_long_path_name.restype = wintypes.DWORD
+        required = get_long_path_name(os.fspath(path), None, 0)
+        if not required:
+            return path
+        buffer = ctypes.create_unicode_buffer(required)
+        written = get_long_path_name(os.fspath(path), buffer, required)
+        if not written or written >= required:
+            return path
+        return Path(buffer.value)
+    except (AttributeError, OSError, ValueError):
+        return path
+
+
+def _path_key(path: Path) -> str:
+    try:
+        resolved = path.resolve(strict=False)
+    except OSError:
+        resolved = path.absolute()
+    return _windows_long_path(resolved).as_posix().lower().rstrip("/")
+
+
 def _validated_guard_roots(roots: tuple[str | Path, ...]) -> tuple[Path, ...]:
     """Validate explicit physical directories before accepting hook traffic."""
     if not roots:
@@ -97,8 +132,8 @@ def _validated_guard_roots(roots: tuple[str | Path, ...]) -> tuple[Path, ...]:
             raise ValueError("protected root is unavailable") from exc
         if not stat.S_ISDIR(metadata.st_mode):
             raise ValueError("protected root must be a directory")
-        resolved = unresolved.resolve(strict=True)
-        identity = resolved.as_posix().lower()
+        resolved = _windows_long_path(unresolved.resolve(strict=True))
+        identity = _path_key(resolved)
         if identity in identities:
             raise ValueError("protected roots must be unique")
         identities.add(identity)
@@ -390,10 +425,7 @@ def _resolved_command_paths(
             resolved.extend(_resolved_command_paths(raw, cwd, protected_roots, depth + 1))
             continue
         for candidate in _candidate_paths(raw, base, protected_roots):
-            try:
-                resolved.append(candidate.resolve(strict=False).as_posix().lower())
-            except OSError:
-                resolved.append(candidate.absolute().as_posix().lower())
+            resolved.append(_path_key(candidate))
     return tuple(resolved)
 
 
@@ -428,11 +460,8 @@ def _cwd_paths(cwd: object) -> tuple[str, ...]:
         return ()
     path = _host_path(cwd)
     raw = path.absolute().as_posix().lower()
-    try:
-        resolved = path.resolve(strict=False).as_posix().lower()
-    except OSError:
-        return (raw,)
-    return (raw, resolved)
+    resolved = _path_key(path)
+    return tuple(dict.fromkeys((raw, resolved)))
 
 
 def _protected_root_data(
@@ -445,10 +474,7 @@ def _protected_root_data(
         path = _host_path(str(raw_root)).expanduser()
         if not path.is_absolute():
             raise ValueError(f"protected root must be absolute: {raw_root}")
-        try:
-            key = path.resolve(strict=False).as_posix().lower().rstrip("/")
-        except OSError:
-            key = path.absolute().as_posix().lower().rstrip("/")
+        key = _path_key(path)
         canonical.append(key)
         spellings.add(key)
         drive = re.match(r"^([a-z]):/(.+)$", key)
