@@ -19,6 +19,94 @@ def test_cli_reports_public_name_and_installed_version(capsys) -> None:
     assert capsys.readouterr().out.strip() == f"hermes-jack-in {version('hermes-jack-in')}"
 
 
+def test_cli_feedback_propose_emits_the_written_review_only_proposal(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    from hermes_jack_in.cli import main
+    from hermes_jack_in.sync import sync_library
+
+    source = tmp_path / "skills"
+    destination = tmp_path / "claude"
+    feedback = tmp_path / "feedback.json"
+    output = tmp_path / "proposal.json"
+    write_skill(source, "one/plain", "name: plain\ndescription: Plain.")
+    sync_library(source, destination, prefer_symlinks=False)
+    feedback.write_text(
+        json.dumps(
+            {
+                "claimed_provenance": "Operator-supplied Claude Code session note.",
+                "version": "feedback-v1",
+                "skill": "plain",
+                "summary": "Clarify one instruction.",
+                "observation": "The projected instructions were ambiguous.",
+                "recommendation": "Clarify the expected operator response.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = main(
+        [
+            "feedback-propose",
+            "--source",
+            str(source),
+            "--destination",
+            str(destination),
+            "--input",
+            str(feedback),
+            "--output",
+            str(output),
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted == json.loads(output.read_text(encoding="utf-8"))
+    assert emitted["review_status"] == "required"
+
+
+def test_cli_feedback_propose_reports_failure_as_json_without_output(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    from hermes_jack_in.cli import main
+    from hermes_jack_in.sync import sync_library
+
+    source = tmp_path / "skills"
+    destination = tmp_path / "claude"
+    feedback = tmp_path / "feedback.json"
+    output = tmp_path / "proposal.json"
+    write_skill(source, "one/plain", "name: plain\ndescription: Plain.")
+    sync_library(source, destination, prefer_symlinks=False)
+    feedback.write_text(
+        '{"version":"feedback-v1","skill":"missing",'
+        '"claimed_provenance":"operator assertion","summary":"s",'
+        '"observation":"o","recommendation":"r"}',
+        encoding="utf-8",
+    )
+
+    code = main(
+        [
+            "feedback-propose",
+            "--source",
+            str(source),
+            "--destination",
+            str(destination),
+            "--input",
+            str(feedback),
+            "--output",
+            str(output),
+            "--json",
+        ]
+    )
+
+    assert code == 2
+    assert "selected projection" in json.loads(capsys.readouterr().err)["error"]
+    assert not output.exists()
+
+
 def test_cli_scan_and_plan_emit_machine_readable_inventory(tmp_path: Path, capsys) -> None:
     from hermes_jack_in.cli import main
 

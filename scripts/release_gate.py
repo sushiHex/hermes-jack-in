@@ -55,6 +55,7 @@ SDIST_MEMBERS = {
     "SUPPORT.md",
     "build-constraints.txt",
     "docs/CLAUDE_CODE_GUIDE.md",
+    "docs/FEEDBACK_PROPOSALS.md",
     "docs/MAPPING_RULES.md",
     "docs/RELEASING.md",
     "docs/VALIDATION.md",
@@ -66,6 +67,7 @@ SDIST_MEMBERS = {
     "src/hermes_jack_in/__main__.py",
     "src/hermes_jack_in/cli.py",
     "src/hermes_jack_in/core.py",
+    "src/hermes_jack_in/feedback.py",
     "src/hermes_jack_in/guard.py",
     "src/hermes_jack_in/sync.py",
     "tests/fixtures/manifests/schema-v1-copy.json",
@@ -74,6 +76,7 @@ SDIST_MEMBERS = {
     "tests/test_claude_guard.py",
     "tests/test_cli.py",
     "tests/test_core.py",
+    "tests/test_feedback.py",
     "tests/test_public_release.py",
     "tests/test_release_gate.py",
     "tests/test_sync.py",
@@ -90,6 +93,7 @@ WHEEL_PACKAGE_MEMBERS = {
     "hermes_jack_in/__main__.py",
     "hermes_jack_in/cli.py",
     "hermes_jack_in/core.py",
+    "hermes_jack_in/feedback.py",
     "hermes_jack_in/guard.py",
     "hermes_jack_in/sync.py",
 }
@@ -586,6 +590,51 @@ def _exercise_install(
         cwd=fixture,
         env=env,
     )
+    run(
+        [console, "check", "--source", source_root, "--destination", destination, "--json"],
+        cwd=fixture,
+        env=env,
+    )
+    feedback_input = fixture / "feedback-v1.json"
+    feedback_input.write_text(
+        json.dumps(
+            {
+                "claimed_provenance": "Sanitized installed canary assertion.",
+                "version": "feedback-v1",
+                "skill": "demo",
+                "summary": "Clarify the installed canary.",
+                "observation": "The installed projection was exercised.",
+                "recommendation": "Review this proposal without applying it.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    proposal = fixture / "review" / "demo-proposal.json"
+    proposal.parent.mkdir()
+    run(
+        [
+            console,
+            "feedback-propose",
+            "--source",
+            source_root,
+            "--destination",
+            destination,
+            "--input",
+            feedback_input,
+            "--output",
+            proposal,
+            "--json",
+        ],
+        cwd=fixture,
+        env=env,
+    )
+    proposal_payload = json.loads(proposal.read_text(encoding="utf-8"))
+    if (
+        proposal_payload.get("version") != "proposal-v1"
+        or proposal_payload.get("review_status") != "required"
+        or proposal_payload.get("projection", {}).get("skill") != "demo"
+    ):
+        raise RuntimeError("installed feedback proposal canary was not review-only")
     run(
         [console, "check", "--source", source_root, "--destination", destination, "--json"],
         cwd=fixture,

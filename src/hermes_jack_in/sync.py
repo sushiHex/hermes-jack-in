@@ -86,6 +86,16 @@ class CheckResult:
 
 
 @dataclass(frozen=True)
+class ProjectionIdentity:
+    skill: str
+    source: str
+    source_hash: str
+    classification: str
+    mode: str
+    desired_output_identity: str
+
+
+@dataclass(frozen=True)
 class _LoadedManifest:
     data: dict[str, Any]
     version: int
@@ -2860,6 +2870,55 @@ def check_library(
     for name in sorted(set(owned) - set(desired)):
         issues.append(CheckIssue("stale-output", name, str(destination / name)))
     return CheckResult(tuple(issues))
+
+
+def verified_projection_identity(
+    source: Path,
+    destination: Path,
+    skill_name: str,
+    *,
+    overrides: Mapping[str, Mapping[str, Any]] | None = None,
+) -> ProjectionIdentity:
+    """Return identity derived from one current, clean, owned projection."""
+    checked = check_library(source, destination, overrides=overrides)
+    if checked.issues:
+        details = "\n".join(
+            f"- {issue.kind}: {issue.name}: {issue.detail}" for issue in checked.issues
+        )
+        raise AdapterError(f"projection check failed:\n{details}")
+
+    destination = _resolve_destination(destination)
+    scan = scan_library(Path(source), overrides=overrides)
+    source = scan.source
+    _reject_overlapping_roots(source, destination)
+    desired = _selected(scan)
+    skill = desired.get(skill_name)
+    if skill is None:
+        raise AdapterError(f"skill is not a selected projection: {skill_name}")
+
+    loaded = _load_manifest(destination)
+    if not loaded.modern_hashes:
+        raise AdapterError("projection manifest requires reconciliation before feedback")
+    _validate_manifest_source(loaded.data, source)
+    entry = loaded.data["skills"].get(skill_name)
+    if entry is None:
+        raise AdapterError(f"skill is not owned by the destination: {skill_name}")
+
+    mode = str(entry["mode"])
+    desired_output_identity = _desired_output_identity(skill, mode)
+    if entry.get("source_hash") != skill.source_hash:
+        raise AdapterError(f"projection source changed during verification: {skill_name}")
+    if entry.get("desired_output_identity") != desired_output_identity:
+        raise AdapterError(f"projection output identity changed during verification: {skill_name}")
+
+    return ProjectionIdentity(
+        skill=skill.name,
+        source=skill.relative_dir.as_posix(),
+        source_hash=skill.source_hash,
+        classification=skill.classification.value,
+        mode=mode,
+        desired_output_identity=desired_output_identity,
+    )
 
 
 def remove_library(destination: Path, *, dry_run: bool = False) -> SyncResult:
