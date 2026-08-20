@@ -48,7 +48,7 @@ Hermes Jack-In keeps Hermes authoritative and makes each decision visible:
 
 ## Installation
 
-After the repository is public, install directly from GitHub:
+Install directly from GitHub:
 
 ```bash
 uv tool install git+https://github.com/sushiHex/hermes-jack-in.git
@@ -63,9 +63,9 @@ uv sync --frozen
 uv run --frozen hermes-jack-in --help
 ```
 
-No package or repository has been published merely by preparing this release
-candidate. PyPI installation instructions will be added only after a package is
-actually published.
+The repository is public. No package has been published to PyPI; PyPI
+installation instructions will be added only after a package is actually
+published.
 
 ## Safe first run
 

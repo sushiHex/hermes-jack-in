@@ -151,6 +151,9 @@ def test_readme_states_beta_scope_and_non_affiliation() -> None:
     assert "one-way projection only" in readme
     assert "does not capture Claude feedback" in readme
     assert "POSIX path checks do not retain directory authority" in readme
+    assert "The repository is public" in readme
+    assert "After the repository is public" not in readme
+    assert "No package or repository has been published" not in readme
     normalized = " ".join(readme.split())
     assert (
         "independent third-party project and is not affiliated with or endorsed by "

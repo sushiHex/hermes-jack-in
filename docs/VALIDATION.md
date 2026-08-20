@@ -22,9 +22,9 @@ A version is releasable only when:
 
 ## 0.1.0 candidate status — 2026-08-19
 
-This candidate is neither tagged nor released. The local gate prints the exact
-commit it qualifies; the public `main` commit must also pass the native hosted
-matrix before a release tag is permitted.
+This candidate is neither tagged nor published to PyPI. The local gate prints
+the exact commit it qualifies; the public `main` commit must also pass the
+native hosted matrix before a release tag is permitted.
 
 | Evidence | Windows | Linux | macOS |
 |---|---|---|---|
