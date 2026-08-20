@@ -125,6 +125,13 @@ def test_release_gate_checks_lock_before_frozen_sync() -> None:
     assert source.index(lock_check) < source.index(frozen_sync)
 
 
+def test_release_gate_guard_canary_uses_physical_root_and_expected_reason() -> None:
+    source = RELEASE_GATE.read_text(encoding="utf-8")
+
+    assert "source_root = source.parent.resolve(strict=True)" in source
+    assert '"skill trees are protected"' in source
+
+
 def test_installer_requires_hashes_for_artifact_runtime_and_build_inputs(tmp_path: Path) -> None:
     release_gate = load_release_gate()
     command = release_gate.install_command(

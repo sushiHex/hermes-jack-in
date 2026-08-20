@@ -544,7 +544,7 @@ def _exercise_install(
     )
     sentinel = destination / "unmanaged-sentinel.txt"
     sentinel.write_bytes(b"preserve-me")
-    source_root = source.parent
+    source_root = source.parent.resolve(strict=True)
     deny = run_guard_event(
         [guard, "--protected-root", source_root],
         {
@@ -555,10 +555,17 @@ def _exercise_install(
         cwd=fixture,
         env=env,
     )
+    deny_output = deny.get("hookSpecificOutput") if deny is not None else None
+    deny_reason = (
+        deny_output.get("permissionDecisionReason")
+        if isinstance(deny_output, dict)
+        else None
+    )
     if (
-        deny is None
-        or not isinstance(deny.get("hookSpecificOutput"), dict)
-        or deny["hookSpecificOutput"].get("permissionDecision") != "deny"
+        not isinstance(deny_output, dict)
+        or deny_output.get("permissionDecision") != "deny"
+        or not isinstance(deny_reason, str)
+        or "skill trees are protected" not in deny_reason
     ):
         raise RuntimeError("installed guard did not deny protected-root mutation")
     allow = run_guard_event(
