@@ -48,11 +48,14 @@ Hermes Jack-In keeps Hermes authoritative and makes each decision visible:
 
 ## Installation
 
-Install directly from GitHub:
+Install directly from the reviewed `v0.1.0` tag:
 
 ```bash
-uv tool install git+https://github.com/sushiHex/hermes-jack-in.git
+uv tool install git+https://github.com/sushiHex/hermes-jack-in.git@v0.1.0
 ```
+
+`v0.1.0` is a source-only GitHub prerelease. The release intentionally has no
+wheel or sdist assets.
 
 For development:
 

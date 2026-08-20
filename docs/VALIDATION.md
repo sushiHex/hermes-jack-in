@@ -20,11 +20,13 @@ A version is releasable only when:
 6. public-history privacy, secret, license, metadata, and documentation audits
    have no blockers.
 
-## 0.1.0 candidate status — 2026-08-19
+## 0.1.0 prerelease evidence — 2026-08-19
 
-This candidate is neither tagged nor published to PyPI. The local gate prints
-the exact commit it qualifies; the public `main` commit must also pass the
-native hosted matrix before a release tag is permitted.
+Version `0.1.0` is prepared as a source-only GitHub prerelease. No package is
+published to PyPI and no wheel or sdist is attached to the release. The release
+body is the authoritative dynamic evidence record: it must identify the exact
+tag target, local gate result, main and tag CI URLs with all 15 native matrix
+jobs passing, signed-tag verification, and reproducible artifact hashes.
 
 | Evidence | Windows | Linux | macOS |
 |---|---|---|---|
@@ -45,12 +47,16 @@ unsupported-operation error rather than falling back to overwrite-capable
 publication.
 
 The Claude Code canary used an isolated temporary project and a uniquely named
-skill installed in copy mode. `check` returned no issues, and Claude resolved a
-bundled reference file and returned its unique token. The personal Claude skill
+skill installed in copy mode. A public GitHub commit installation classified
+direct, converted, explicitly adapted, and excluded fixtures as intended;
+`check` returned no issues, repeated synchronization was a no-op, and Claude
+Code 2.1.237 resolved the projected bundled reference and returned its canary
+token. The guard denied a protected-tree mutation and allowed a read-only
+control. Removal cleaned only managed skills. The personal Claude skill
 directory was not modified. A real 103-skill Hermes source scan also completed
 with no issues; the non-mutating plan against the existing personal destination
-reported no actions and no issues. Inventory names and local paths are not
-published as release evidence.
+reported no actions and no issues. Inventory names, tokens, and local paths are
+not published as release evidence.
 
 ## Reproduction
 
