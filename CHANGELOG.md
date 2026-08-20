@@ -5,6 +5,12 @@ All notable changes to Hermes Jack-In are documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- Add a manual `feedback-propose` command that binds bounded, untrusted Claude
+  feedback to one current owned projection and emits a canonical
+  `review_status: "required"` proposal without changing Hermes or Claude state.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

@@ -11,9 +11,11 @@ The project is **Beta**. It does not run a daemon or modify Hermes Agent. A
 mutating command writes only to its explicit destination, except that it may
 create missing destination ancestors and keeps a persistent per-destination
 lock file in the destination's parent; see
-[Concurrent-writer boundary](#concurrent-writer-boundary). This initial beta is
-one-way projection only: it does not capture Claude feedback, create edit
-proposals, or change source Hermes skills.
+[Concurrent-writer boundary](#concurrent-writer-boundary). This beta remains
+one-way projection only: it does not automatically capture Claude session feedback,
+learn, or change source Hermes skills. The explicit `feedback-propose` command can
+bind operator-supplied, untrusted feedback to one current projection and write a
+review-only proposal outside both managed roots; it never applies that proposal.
 
 Hermes Jack-In is an independent third-party project and is not affiliated with
 or endorsed by Anthropic or Nous Research. “Claude,” “Claude Code,” and “Hermes
@@ -123,14 +125,18 @@ Commands:
 - `sync` installs or reconciles owned artifacts.
 - `check` reports source drift, destination drift, missing output, and stale
   output without mutation.
+- `feedback-propose` writes one canonical, review-required proposal for a current
+  owned projection; feedback remains untrusted and no managed state is changed.
 - `remove` deletes only unchanged artifacts whose ownership is proved.
 
 Add `--json` for machine-readable output. Add `--copy` to `sync` for an explicit
 materialized snapshot. An empty source may be scanned and planned, but a
 mutating all-empty reconciliation requires `--allow-empty`.
 
-See the [operator guide](docs/CLAUDE_CODE_GUIDE.md) and
-[mapping rules](docs/MAPPING_RULES.md) before using a personal destination.
+See the [operator guide](docs/CLAUDE_CODE_GUIDE.md),
+[mapping rules](docs/MAPPING_RULES.md), and
+[review-only feedback workflow](docs/FEEDBACK_PROPOSALS.md) before using a
+personal destination or creating a proposal.
 
 ## Safety model
 

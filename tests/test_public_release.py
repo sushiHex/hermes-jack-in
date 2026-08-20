@@ -192,11 +192,19 @@ def test_candidate_has_no_configured_private_identity() -> None:
 
 def test_readme_states_beta_scope_and_non_affiliation() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    feedback = (ROOT / "docs/FEEDBACK_PROPOSALS.md").read_text(encoding="utf-8")
 
     assert "# Hermes Jack-In" in readme
     assert "Beta" in readme
     assert "one-way projection only" in readme
-    assert "does not capture Claude feedback" in readme
+    assert "does not automatically capture Claude session feedback" in readme
+    assert "feedback-propose" in readme
+    assert "docs/FEEDBACK_PROPOSALS.md" in readme
+    assert "review_status" in feedback
+    assert '"required"' in feedback
+    assert "untrusted" in feedback
+    assert "never applies" in feedback
+    assert "There is no `feedback-apply` command" in feedback
     assert "POSIX path checks do not retain directory authority" in readme
     assert "may leave earlier completed changes committed" in readme
     assert "The repository is public" in readme

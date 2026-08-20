@@ -12,6 +12,7 @@ from typing import Any, Sequence
 import yaml
 
 from .core import Classification, scan_library
+from .feedback import propose_feedback
 from .sync import AdapterError, check_library, remove_library, sync_library
 
 
@@ -90,6 +91,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     check = commands.add_parser("check", help="detect drift and invalid state")
     _common_source(check, destination=True)
+    feedback = commands.add_parser(
+        "feedback-propose",
+        help="create an untrusted review-only proposal for one current projection",
+    )
+    _common_source(feedback, destination=True)
+    feedback.add_argument("--input", required=True, type=Path)
+    feedback.add_argument("--output", required=True, type=Path)
     remove = commands.add_parser("remove", help="remove only adapter-owned artifacts")
     remove.add_argument("--destination", required=True, type=Path)
     remove.add_argument("--dry-run", action="store_true")
@@ -148,6 +156,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload = _scan_payload(args.source, overrides)
             _emit(payload, args.json)
             return 1 if payload["issues"] else 0
+
+        if args.command == "feedback-propose":
+            payload = propose_feedback(
+                args.source,
+                args.destination,
+                args.input,
+                args.output,
+                overrides=overrides,
+            )
+            if args.json:
+                _emit(payload, True)
+            else:
+                print(f"proposal: {args.output}")
+                print("review status: required")
+            return 0
 
         if args.command == "plan":
             inventory = _scan_payload(args.source, overrides)

@@ -72,6 +72,17 @@ def test_release_gate_has_authoritative_lint_scope() -> None:
     assert release_gate.LINT_TARGETS == ("src", "tests", "scripts")
 
 
+def test_release_gate_allowlists_the_feedback_contract_artifacts() -> None:
+    release_gate = load_release_gate()
+
+    assert "hermes_jack_in/feedback.py" in release_gate.WHEEL_PACKAGE_MEMBERS
+    assert {
+        "docs/FEEDBACK_PROPOSALS.md",
+        "src/hermes_jack_in/feedback.py",
+        "tests/test_feedback.py",
+    } <= release_gate.SDIST_MEMBERS
+
+
 def test_release_gate_reads_private_markers_from_the_environment(monkeypatch) -> None:
     monkeypatch.setenv(
         "HERMES_JACK_IN_FORBIDDEN_MARKERS",
