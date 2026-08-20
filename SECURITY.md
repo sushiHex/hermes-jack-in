@@ -40,9 +40,10 @@ all-zero carriers. Empty ancestors created by a failed establishment attempt
 are removed either through the still-owned exact creation handle when identity
 is unavailable or through an identity-matched reopen relative to the retained
 parent. Nonempty, replaced, or otherwise unproved state is preserved.
-Recoverable transaction failures trigger
-identity-checked rollback; ambiguous scratch or quarantine state is preserved
-rather than guessed away.
+Each artifact or manifest commit has identity-checked rollback for its own
+recoverable failure. A later failure can leave earlier completed entries
+committed; retry the command to converge from the updated manifest. Ambiguous
+scratch or quarantine state is preserved rather than guessed away.
 
 The per-destination lock file is persistent so every cooperating process locks
 the same file object. If the first transaction for a missing destination fails

@@ -10,7 +10,7 @@ import pytest
 
 
 RELEASE_GATE = Path(__file__).parents[1] / "scripts" / "release_gate.py"
-BUILD_CONSTRAINTS = Path(__file__).parents[1] / "build-constraints.txt"
+BUILD_CONSTRAINTS = Path(__file__).resolve().parents[1] / "build-constraints.txt"
 EXPECTED_BUILD_REQUIREMENTS = {
     "hatchling": (
         "1.31.0",
@@ -113,6 +113,16 @@ def test_release_gate_uses_literal_hash_constrained_build_command() -> None:
         "--out-dir",
         dist_dir,
     ]
+
+
+def test_release_gate_checks_lock_before_frozen_sync() -> None:
+    source = RELEASE_GATE.read_text(encoding="utf-8")
+    lock_check = 'run([uv, "lock", "--check"], cwd=candidate, env=env)'
+    frozen_sync = 'run([uv, "sync", "--frozen"], cwd=candidate, env=env)'
+
+    assert lock_check in source
+    assert frozen_sync in source
+    assert source.index(lock_check) < source.index(frozen_sync)
 
 
 def test_installer_requires_hashes_for_artifact_runtime_and_build_inputs(tmp_path: Path) -> None:

@@ -186,10 +186,12 @@ Claude Code controls, not protection against external same-user processes.
 
 ## Concurrent-writer boundary
 
-Cooperating `sync` and `remove` operations serialize the destination transaction
-with an advisory OS lock beginning before manifest load. Artifact and manifest
-publication are separate atomic renames; ordinary exceptions trigger
-identity-checked rollback.
+Cooperating `sync` and `remove` operations serialize each destination mutation
+attempt with an advisory OS lock beginning before manifest load. Artifact and
+manifest publication are separate atomic renames. Each artifact or manifest
+commit has identity-checked rollback for its own recoverable failure; a later
+failure may leave earlier completed changes committed. Retry the command to
+converge the destination from its updated manifest.
 
 This does not protect against a malicious process running as the same user.
 POSIX path checks do not retain directory authority between checks; a same-user

@@ -610,6 +610,7 @@ def main() -> int:
         )
 
         candidate = _archive_candidate(git, temp_root, env)
+        run([uv, "lock", "--check"], cwd=candidate, env=env)
         run([uv, "sync", "--frozen"], cwd=candidate, env=env)
         candidate_venv = candidate / ".venv"
         candidate_python = venv_python(candidate_venv)

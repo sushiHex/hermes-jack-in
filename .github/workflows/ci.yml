@@ -37,6 +37,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Verify lock consistency
+        run: uv lock --check
+
       - name: Install frozen development environment
         run: uv sync --frozen --python "${{ matrix.python-version }}"
 

@@ -560,10 +560,17 @@ def test_guide_locks_exact_literal_guard_exemptions() -> None:
         assert _evaluate(guard, {"tool_name": "Bash", "tool_input": {"command": command}}) is None
 
 
-def test_guard_allows_unrelated_bash_and_non_bash_tools() -> None:
+def test_guard_allows_unrelated_bash_and_non_bash_tools(tmp_path: Path) -> None:
     guard = load_guard()
+    protected_roots = (tmp_path / "source", tmp_path / "destination")
 
-    assert _evaluate(guard, {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}}) is None
+    assert (
+        guard.evaluate(
+            {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}},
+            protected_roots=protected_roots,
+        )
+        is None
+    )
     for command, cwd in (
         ("echo scripts/*.py", "C:/Users/example/repos/hermes-jack-in"),
         ("gcc -o out src/*.c", "C:/Users/example/repos/example"),
@@ -579,8 +586,9 @@ def test_guard_allows_unrelated_bash_and_non_bash_tools() -> None:
         ("printf x > /tmp/" + "*" * 80 + "z", "C:/Users/example"),
     ):
         assert (
-            _evaluate(guard,
-                {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}
+            guard.evaluate(
+                {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}},
+                protected_roots=protected_roots,
             )
             is None
         )
