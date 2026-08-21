@@ -5,6 +5,8 @@ All notable changes to Hermes Jack-In are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-21
+
 ### Added
 
 - Add a manual `feedback-propose` command that binds bounded, untrusted Claude
@@ -42,5 +44,6 @@ All notable changes to Hermes Jack-In are documented here. The project follows
 - Keep GitHub Actions on reviewed Node 24 releases while retaining immutable
   full-SHA pins, and use one `uv` Dependabot stream for Python dependencies.
 
-[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.1.0

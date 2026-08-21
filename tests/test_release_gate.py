@@ -293,7 +293,7 @@ def test_release_gate_rejects_unsafe_archive_member_names() -> None:
     ):
         with pytest.raises(RuntimeError):
             release_gate.validate_archive_member(name)
-    release_gate.validate_archive_member("hermes_jack_in-0.1.0/src/module.py")
+    release_gate.validate_archive_member("hermes_jack_in-0.2.0/src/module.py")
 
 
 def test_release_gate_rejects_duplicate_wheel_member_names(tmp_path: Path) -> None:
@@ -336,10 +336,10 @@ def test_public_sdist_allowlist_excludes_private_evidence() -> None:
 
 def test_public_sdist_rejects_unlisted_nested_evidence(tmp_path: Path) -> None:
     release_gate = load_release_gate()
-    sdist = tmp_path / "hermes_jack_in-0.1.0.tar.gz"
+    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
     payload = b"private audit\n"
     with tarfile.open(sdist, "w:gz") as archive:
-        member = tarfile.TarInfo("hermes_jack_in-0.1.0/docs/private-audit.md")
+        member = tarfile.TarInfo("hermes_jack_in-0.2.0/docs/private-audit.md")
         member.size = len(payload)
         import io
 
@@ -352,7 +352,7 @@ def test_public_sdist_rejects_unlisted_nested_evidence(tmp_path: Path) -> None:
 def _write_complete_test_sdist(release_gate, path: Path, extras: list[tarfile.TarInfo]) -> None:
     import io
 
-    root = "hermes_jack_in-0.1.0"
+    root = "hermes_jack_in-0.2.0"
     with tarfile.open(path, "w:gz") as archive:
         for relative in sorted(release_gate.SDIST_MEMBERS):
             payload = f"public fixture: {relative}\n".encode()
@@ -368,7 +368,7 @@ def _write_complete_test_sdist(release_gate, path: Path, extras: list[tarfile.Ta
 
 def test_public_sdist_rejects_members_outside_the_distribution_root(tmp_path: Path) -> None:
     release_gate = load_release_gate()
-    sdist = tmp_path / "hermes_jack_in-0.1.0.tar.gz"
+    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
     _write_complete_test_sdist(
         release_gate,
         sdist,
@@ -385,8 +385,8 @@ def test_public_sdist_rejects_link_members(
     member_type: bytes,
 ) -> None:
     release_gate = load_release_gate()
-    sdist = tmp_path / "hermes_jack_in-0.1.0.tar.gz"
-    link = tarfile.TarInfo("hermes_jack_in-0.1.0/docs/unlisted-link")
+    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
+    link = tarfile.TarInfo("hermes_jack_in-0.2.0/docs/unlisted-link")
     link.type = member_type
     link.linkname = "../../outside"
     _write_complete_test_sdist(release_gate, sdist, [link])

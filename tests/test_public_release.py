@@ -44,6 +44,7 @@ def test_public_package_identity_is_hermes_jack_in() -> None:
     sdist = metadata["tool"]["hatch"]["build"]["targets"]["sdist"]
 
     assert project["name"] == "hermes-jack-in"
+    assert project["version"] == "0.2.0"
     assert project["description"] == "Safely share Hermes Agent skills with Claude Code"
     assert scripts == {
         "hermes-jack-in": "hermes_jack_in.cli:main",
@@ -87,6 +88,10 @@ def test_public_governance_and_ci_files_exist() -> None:
     assert (ROOT / ".gitattributes").is_file()
     assert (ROOT / "overrides.example.yaml").is_file()
     assert (ROOT / "docs/VALIDATION.md").is_file()
+    bug_report = (ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'placeholder: "0.2.0"' in bug_report
 
 
 def test_dependabot_covers_actions_and_uv_without_duplicate_python_updates() -> None:
@@ -131,13 +136,17 @@ def test_ci_uses_immutable_action_commits_and_qualifies_tags() -> None:
     assert lock_check < frozen_sync
 
 
-def test_changelog_records_the_v010_prerelease() -> None:
+def test_changelog_records_the_v020_prerelease() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
     assert changelog.index("## [Unreleased]") < changelog.index(
+        "## [0.2.0] - 2026-08-21"
+    )
+    assert changelog.index("## [0.2.0] - 2026-08-21") < changelog.index(
         "## [0.1.0] - 2026-08-19"
     )
-    assert "[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.1.0...HEAD" in changelog
+    assert "[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.2.0...HEAD" in changelog
+    assert "[0.2.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.2.0" in changelog
     assert "[0.1.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.1.0" in changelog
 
 
@@ -150,7 +159,10 @@ def test_release_docs_define_a_source_only_github_prerelease() -> None:
     ).lower()
 
     assert "uv tool install git+https://github.com/sushiHex/hermes-jack-in.git\n" in readme
-    assert "git+https://github.com/sushiHex/hermes-jack-in.git@v0.1.0" in readme
+    assert "git+https://github.com/sushiHex/hermes-jack-in.git@v0.2.0" in readme
+    assert "## 0.2.0 prerelease evidence — 2026-08-21" in (
+        ROOT / "docs/VALIDATION.md"
+    ).read_text(encoding="utf-8")
     assert "source-only GitHub prerelease" in readme
     assert "No package has been published to PyPI" in readme
     assert "source-only GitHub prerelease" in releasing
