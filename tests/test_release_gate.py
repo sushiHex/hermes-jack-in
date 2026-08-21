@@ -200,16 +200,21 @@ def test_build_constraints_pin_and_hash_the_backend_closure() -> None:
     assert 'python_version < "3.11"' in tomli
 
 
-def test_release_gate_requires_one_wheel_and_one_sdist(tmp_path: Path) -> None:
+def test_release_gate_requires_exact_wheel_and_sdist_names(tmp_path: Path) -> None:
     release_gate = load_release_gate()
-    wheel = tmp_path / "package-1.0-py3-none-any.whl"
-    sdist = tmp_path / "package-1.0.tar.gz"
+    wheel = tmp_path / "hermes_jack_in-0.2.0-py3-none-any.whl"
+    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
     wheel.touch()
     sdist.touch()
 
     assert release_gate.built_artifacts(tmp_path) == (wheel, sdist)
 
-    (tmp_path / "duplicate-1.0-py3-none-any.whl").touch()
+    wheel.rename(tmp_path / "unrelated-name.whl")
+    with pytest.raises(RuntimeError, match="artifact filenames are incorrect"):
+        release_gate.built_artifacts(tmp_path)
+
+    (tmp_path / "unrelated-name.whl").rename(wheel)
+    (tmp_path / "duplicate-0.2.0-py3-none-any.whl").touch()
     with pytest.raises(RuntimeError, match="exactly one wheel and one sdist"):
         release_gate.built_artifacts(tmp_path)
 

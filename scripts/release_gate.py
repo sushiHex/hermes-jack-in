@@ -211,6 +211,18 @@ def built_artifacts(dist_dir: Path) -> tuple[Path, Path]:
             "release build must produce exactly one wheel and one sdist; "
             f"found {len(wheels)} wheel(s) and {len(sdists)} sdist(s)"
         )
+    project_name, project_version = project_identity()
+    distribution = project_name.replace("-", "_")
+    expected = {
+        f"{distribution}-{project_version}-py3-none-any.whl",
+        f"{distribution}-{project_version}.tar.gz",
+    }
+    actual = {wheels[0].name, sdists[0].name}
+    if actual != expected:
+        raise RuntimeError(
+            "release artifact filenames are incorrect: "
+            f"expected={sorted(expected)} actual={sorted(actual)}"
+        )
     return wheels[0], sdists[0]
 
 
