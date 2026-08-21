@@ -20,6 +20,19 @@ A version is releasable only when:
 6. public-history privacy, secret, license, metadata, and documentation audits
    have no blockers.
 
+## 0.2.0 prerelease evidence — 2026-08-21
+
+Version `0.2.0` is prepared as a source-only GitHub prerelease. It adds the
+manual, bounded `feedback-propose` handoff while keeping Hermes authoritative:
+Claude feedback remains untrusted, every proposal requires human review, and no
+proposal is applied. No package is published to PyPI and no wheel or sdist is
+attached to the release.
+
+The release body is the authoritative dynamic evidence record. It must identify
+the exact tag target, local gate result, protected-main and tag CI URLs with all
+declared native matrix jobs passing, signed-tag verification, reproducible
+artifact hashes, and the sanitized real Claude Code feedback canary.
+
 ## 0.1.0 prerelease evidence — 2026-08-19
 
 Version `0.1.0` is prepared as a source-only GitHub prerelease. No package is
