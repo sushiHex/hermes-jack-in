@@ -5,6 +5,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -46,6 +47,24 @@ def load_guard():
     return module
 
 
+def invoke_guard_main(
+    guard: Any,
+    arguments: list[str],
+    command: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> dict[str, Any] | None:
+    event = {"tool_name": "Bash", "tool_input": {"command": command}}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    try:
+        result = guard.main(arguments)
+    except SystemExit as exc:
+        pytest.fail(f"guard CLI is unavailable: {exc}")
+    assert result == 0
+    output = capsys.readouterr().out
+    return json.loads(output) if output else None
+
+
 def test_guard_configuration_requires_unique_existing_physical_directories(
     tmp_path: Path,
 ) -> None:
@@ -83,6 +102,605 @@ def test_guard_main_denies_bash_when_roots_are_not_configured(monkeypatch, capsy
     decision = json.loads(capsys.readouterr().out)
     assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "configuration" in decision["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+
+def test_managed_destination_tracer_allows_unmanaged_sibling_and_denies_managed_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Managed guard tracer.\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    unmanaged = destination / "oracle" / "oracle_sdk.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    assert (
+        invoke_guard_main(
+            guard,
+            arguments,
+            f'python "{unmanaged}" --help',
+            monkeypatch,
+            capsys,
+        )
+        is None
+    )
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'sed -i s/old/new/ "{destination / "demo" / "SKILL.md"}"',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_managed_destination_empty_manifest_without_source_falls_back_to_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    (destination / MANIFEST_NAME).write_text(
+        json.dumps({"version": 3, "skills": {}}),
+        encoding="utf-8",
+    )
+    unmanaged = destination / "oracle" / "oracle_sdk.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert invoke_guard_main(guard, arguments, "pytest -q", monkeypatch, capsys) is None
+
+
+def test_managed_destination_valid_empty_manifest_allows_sibling_but_protects_control(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    manifest_path = destination / MANIFEST_NAME
+    manifest_path.write_text(
+        json.dumps(
+            {"version": 3, "source": str(source.resolve()), "skills": {}},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    assert (
+        invoke_guard_main(
+            guard,
+            arguments,
+            f'python "{unmanaged}" --help',
+            monkeypatch,
+            capsys,
+        )
+        is None
+    )
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'rm -f "{manifest_path}"',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_managed_destination_does_not_protect_prefix_siblings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "pdf"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: Managed prefix boundary.\n---\n\n# PDF\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    for sibling_name in ("pdf-tools", "pdf2"):
+        unmanaged = destination / sibling_name / "runner.py"
+        unmanaged.parent.mkdir()
+        unmanaged.write_text("print('unmanaged')\n", encoding="utf-8")
+        assert (
+            invoke_guard_main(
+                guard,
+                arguments,
+                f'python "{unmanaged}" --help',
+                monkeypatch,
+                capsys,
+            )
+            is None
+        )
+
+
+@pytest.mark.parametrize("suffix", ("${EMPTY}", "$(printf '')"))
+@pytest.mark.parametrize("target_kind", ("source", "managed"))
+def test_protected_path_dynamic_suffix_is_denied(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    suffix: str,
+    target_kind: str,
+) -> None:
+    from hermes_jack_in.sync import sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "pdf"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: Dynamic suffix boundary.\n---\n\n# PDF\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+    target = source if target_kind == "source" else destination / "pdf"
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'rm -rf "{target}{suffix}"',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_managed_destination_live_alias_glob_is_protected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME, sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "pdf"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: Managed live alias.\n---\n\n# PDF\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination)
+    manifest_path = destination / MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest["skills"]["pdf"]["mode"] not in {"symlink", "junction"}:
+        pytest.skip("platform did not create a live-link projection")
+    manifest["version"] = 2
+    manifest["skills"]["pdf"].pop("desired_output_identity")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'rm -rf "{destination / "pdf"}*"',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    "manifest_payload",
+    (
+        None,
+        b"{",
+        json.dumps({"version": 99, "source": "ignored", "skills": {}}).encode(),
+        json.dumps({"version": 3, "source": "C:/wrong/source", "skills": {}}).encode(),
+    ),
+    ids=("absent", "malformed", "unsupported", "source-mismatch"),
+)
+def test_managed_destination_ambiguous_manifest_falls_back_to_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    manifest_payload: bytes | None,
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    if manifest_payload is not None:
+        (destination / MANIFEST_NAME).write_bytes(manifest_payload)
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert invoke_guard_main(guard, arguments, "pytest -q", monkeypatch, capsys) is None
+
+
+def test_managed_destination_modified_materialized_artifact_falls_back_to_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Materialized ownership.\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    (destination / "demo" / "SKILL.md").write_text("replaced\n", encoding="utf-8")
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_managed_destination_unavailable_live_target_falls_back_to_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME, sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Live target availability.\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination)
+    manifest = json.loads((destination / MANIFEST_NAME).read_text(encoding="utf-8"))
+    if manifest["skills"]["demo"]["mode"] not in {"symlink", "junction"}:
+        pytest.skip("platform did not create a live-link projection")
+    skill.rename(source / "unavailable-demo")
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_managed_destination_manifest_mode_must_match_live_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME, sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Physical mode binding.\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    manifest_path = destination / MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["skills"]["demo"].update(
+        {"mode": "junction", "target": str(skill.resolve())}
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_guard_ownership_rejects_nonregular_manifest(tmp_path: Path) -> None:
+    from hermes_jack_in.sync import (
+        MANIFEST_NAME,
+        OwnershipError,
+        _load_guard_ownership,
+    )
+
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    target = tmp_path / "manifest-target.json"
+    target.write_text(
+        json.dumps({"version": 3, "source": str(source.resolve()), "skills": {}}),
+        encoding="utf-8",
+    )
+    manifest_path = destination / MANIFEST_NAME
+    try:
+        manifest_path.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"file symlink unavailable: {exc}")
+
+    with pytest.raises(OwnershipError, match="regular"):
+        _load_guard_ownership(destination, (source.resolve(),))
+
+
+def test_guard_ownership_rejects_nonregular_manifest_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import stat
+
+    from hermes_jack_in import sync
+
+    source = tmp_path / "source"
+    source.mkdir()
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    data = {"version": 3, "source": str(source.resolve()), "skills": {}}
+    content = json.dumps(data).encode()
+    loaded = sync._LoadedManifest(
+        data,
+        3,
+        True,
+        sync._FilesystemIdentity(0, 0, stat.S_IFLNK, 0, 0),
+        content,
+    )
+    monkeypatch.setattr(sync, "_load_manifest", lambda _: loaded)
+
+    with pytest.raises(sync.OwnershipError, match="regular"):
+        sync._load_guard_ownership(destination, (source.resolve(),))
+
+
+def test_managed_destination_revalidates_manifest_before_allow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import MANIFEST_NAME, sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Snapshot revalidation.\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    manifest_path = destination / MANIFEST_NAME
+    original_evaluate = guard.evaluate
+    replaced = False
+
+    def replace_after_evaluation(*args: Any, **kwargs: Any) -> dict[str, Any] | None:
+        nonlocal replaced
+        decision = original_evaluate(*args, **kwargs)
+        if not replaced:
+            manifest_path.write_bytes(manifest_path.read_bytes() + b" ")
+            replaced = True
+        return decision
+
+    monkeypatch.setattr(guard, "evaluate", replace_after_evaluation)
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_managed_destination_revalidates_artifacts_before_allow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from hermes_jack_in.sync import sync_library
+
+    guard = load_guard()
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Artifact revalidation.\n---\n\n# Demo\n",
+        encoding="utf-8",
+    )
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    sync_library(source, destination, prefer_symlinks=False)
+    unmanaged = destination / "oracle" / "runner.py"
+    unmanaged.parent.mkdir()
+    unmanaged.write_text("print('oracle')\n", encoding="utf-8")
+    original_evaluate = guard.evaluate
+    changed = False
+
+    def change_after_evaluation(*args: Any, **kwargs: Any) -> dict[str, Any] | None:
+        nonlocal changed
+        decision = original_evaluate(*args, **kwargs)
+        if not changed:
+            (destination / "demo" / "SKILL.md").write_text(
+                "changed after policy load\n",
+                encoding="utf-8",
+            )
+            changed = True
+        return decision
+
+    monkeypatch.setattr(guard, "evaluate", change_after_evaluation)
+    arguments = [
+        "--protected-root",
+        str(source.resolve()),
+        "--managed-destination",
+        str(destination.resolve()),
+    ]
+
+    decision = invoke_guard_main(
+        guard,
+        arguments,
+        f'python "{unmanaged}" --help',
+        monkeypatch,
+        capsys,
+    )
+    assert decision is not None
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_guard_main_denies_bash_when_evaluation_raises(

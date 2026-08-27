@@ -2203,6 +2203,60 @@ def _validate_manifest_source(manifest: Mapping[str, Any], source: Path) -> None
                 raise OwnershipError(f"invalid manifest symlink target for {name}: {actual}")
 
 
+def _load_guard_ownership(
+    destination: Path,
+    protected_sources: tuple[Path, ...],
+) -> tuple[_LoadedManifest, tuple[Path, ...]]:
+    """Load exact destination paths owned by one protected source."""
+    loaded = _load_manifest(destination)
+    if loaded.identity is None:
+        raise OwnershipError(f"ownership manifest is missing: {_manifest_path(destination)}")
+    if (
+        loaded.identity.file_type != stat.S_IFREG
+        or loaded.identity.reparse_attributes
+        or loaded.identity.reparse_tag
+    ):
+        raise OwnershipError("ownership manifest must be a physical regular file")
+    recorded_source = loaded.data.get("source")
+    if not isinstance(recorded_source, str):
+        raise OwnershipError("ownership manifest is missing a valid source")
+    for source in protected_sources:
+        if Path(recorded_source).resolve() != source.resolve():
+            continue
+        try:
+            _validate_manifest_source(loaded.data, source)
+        except OwnershipError:
+            continue
+        for name, entry in loaded.data["skills"].items():
+            if not _owned_artifact_is_unchanged(destination / name, entry):
+                raise OwnershipError(
+                    f"ownership manifest entry does not match its installed artifact: {name}"
+                )
+        paths = (
+            _manifest_path(destination),
+            *(destination / name for name in loaded.data["skills"]),
+        )
+        return loaded, paths
+    raise OwnershipError("ownership manifest source is not a protected root")
+
+
+def _guard_ownership_matches(
+    destination: Path,
+    expected: _LoadedManifest,
+) -> bool:
+    """Return whether the manifest still has the exact loaded identity and bytes."""
+    try:
+        current = _load_manifest(destination)
+    except (OSError, OwnershipError):
+        return False
+    if current.identity != expected.identity or current.content != expected.content:
+        return False
+    return all(
+        _owned_artifact_is_unchanged(destination / name, entry)
+        for name, entry in expected.data["skills"].items()
+    )
+
+
 def _live_target_matches_desired(entry: Mapping[str, Any], skill: Skill) -> bool:
     return (
         entry.get("mode") in {"symlink", "junction"}

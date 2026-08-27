@@ -105,17 +105,31 @@ Before personal activation, configure Claude Code permissions for the actual
 source root and register the installed guard as an optional `PreToolUse` hook.
 The guard has no inferred or environment-controlled roots.
 
-Example hook command:
+For a personal Claude skills directory that mixes Hermes-managed entries with
+unmanaged personal skills, protect the source as a whole and declare the
+destination as mixed ownership:
 
 ```text
-hermes-jack-in-guard --protected-root /absolute/hermes/skills --protected-root /absolute/claude/skills
+hermes-jack-in-guard --protected-root /absolute/hermes/skills --managed-destination /absolute/claude/skills
 ```
 
 Place that command in a Claude Code `PreToolUse` command hook with matcher
 `Bash`. Each `--protected-root` must name a unique, existing, absolute physical
 directory whose path and ancestors contain no symlink or Windows reparse alias.
-Invalid configuration denies Bash. Test harmless allowed and denied commands
-before relying on the hook.
+`--managed-destination` accepts one similarly physical mixed directory, loads
+its existing ownership manifest, binds the recorded source to an explicit
+protected root, and protects only the manifest plus its exact managed children.
+Unmanaged siblings remain outside this hook's authority.
+
+A missing, malformed, unsupported, source-mismatched, nonregular, changing, or
+artifact-mismatched manifest makes ownership ambiguous, so the guard protects
+the whole mixed destination for that invocation. Invalid root/destination configuration denies
+Bash globally as before. A valid empty manifest must still record the protected
+source. The guard rechecks manifest identity and exact bytes immediately before
+returning an allow based on narrow ownership; it does not claim protection
+against a same-user replacement after the hook returns. Use a second
+`--protected-root` instead when the entire destination really is protected.
+Test harmless allowed and denied commands before relying on the hook.
 
 The guard performs bounded lexical and path analysis without enumerating the
 filesystem. It covers native/MSYS spellings, relative and ancestor paths,
