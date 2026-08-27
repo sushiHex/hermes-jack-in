@@ -5,6 +5,13 @@ All notable changes to Hermes Jack-In are documented here. The project follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Scope the optional Claude Bash guard to mixed personal skill-tree ownership via
+  `--managed-destination`. Valid manifest-owned children and control state remain
+  protected while unmanaged siblings stay usable; ambiguous, drifted, or
+  changing ownership evidence falls back to whole-destination protection.
+
 ## [0.2.0] - 2026-08-21
 
 ### Added

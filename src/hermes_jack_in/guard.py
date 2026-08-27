@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
+from hermes_jack_in.sync import _guard_ownership_matches, _load_guard_ownership
+
 ANSI_C_QUOTE = re.compile(r"\$'((?:\\.|[^'\\])*)'")
 # Locale translation happens before execution; reject its marker lexically rather
 # than attempting to model whether quoting, escaping, or comments make it inert.
@@ -30,6 +32,7 @@ MAX_EXTGLOB_TEXT_LENGTH = 32
 # This is intentionally not a shell parser.
 LITERAL_READ_ONLY_COMMAND = re.compile(r"[A-Za-z0-9 \t_./:\\'\",=+%@-]+\Z")
 ASCII_CHARS = frozenset(chr(value) for value in range(128))
+PATH_REFERENCE_BOUNDARIES = frozenset("/ \t\r\n;&|()<>,:=$`\"'")
 POSIX_CLASS_CHARS = {
     "alnum": frozenset(string.ascii_letters + string.digits),
     "alpha": frozenset(string.ascii_letters),
@@ -511,6 +514,21 @@ def _command_may_mutate(command: str) -> bool:
     )
 
 
+def _mentions_path(value: str, path: str) -> bool:
+    """Match a path spelling without treating a prefix sibling as the path."""
+    start = 0
+    while True:
+        index = value.find(path, start)
+        if index < 0:
+            return False
+        end = index + len(path)
+        before = index == 0 or value[index - 1] in PATH_REFERENCE_BOUNDARIES
+        after = end == len(value) or value[end] in PATH_REFERENCE_BOUNDARIES
+        if before and after:
+            return True
+        start = index + 1
+
+
 def evaluate(
     event: Mapping[str, Any],
     *,
@@ -548,6 +566,7 @@ def evaluate(
         canonical_roots, root_spellings, lexical_fragments = _protected_root_data(
             tuple(configured_roots)
         )
+        candidate_roots = tuple(dict.fromkeys((*canonical_roots, *root_spellings)))
         command_variants = _literal_command_variants(command)
         normalized_variants = tuple(
             re.sub(r"/+", "/", variant.replace("\\", "/"))
@@ -562,19 +581,23 @@ def evaluate(
             for path in _resolved_command_paths(
                 variant,
                 event.get("cwd"),
-                canonical_roots,
+                candidate_roots,
             )
         )
     except ValueError:
         return _deny("Bash literal expansion or protected-root configuration is invalid.")
     cwd_paths = _cwd_paths(event.get("cwd"))
     if (
-        any(root in normalized for normalized in normalized_variants for root in root_spellings)
+        any(
+            _mentions_path(normalized, root)
+            for normalized in normalized_variants
+            for root in root_spellings
+        )
         or (
             not isinstance(event.get("cwd"), str)
             and _command_may_mutate(command)
             and any(
-                fragment in normalized
+                _mentions_path(normalized, fragment)
                 for normalized in normalized_variants
                 for fragment in lexical_fragments
             )
@@ -612,6 +635,11 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="absolute physical skill root to protect; repeatable and required",
     )
+    parser.add_argument(
+        "--managed-destination",
+        type=Path,
+        help="absolute physical mixed destination whose owned children are protected",
+    )
     return parser.parse_args(argv)
 
 
@@ -625,10 +653,24 @@ def _load_event_from_stdin() -> Any:
 
 def main(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
+    ownership_snapshot = None
+    managed_destination = None
     try:
         roots = _validated_guard_roots(tuple(args.protected_root or ()))
+        effective_paths: tuple[Path, ...] = roots
+        if args.managed_destination is not None:
+            destination = _validated_guard_roots((args.managed_destination,))[0]
+            managed_destination = destination
+            try:
+                loaded, managed_paths = _load_guard_ownership(destination, roots)
+            except Exception:  # noqa: BLE001 - ambiguous ownership protects the mixed root
+                effective_paths += (destination,)
+            else:
+                ownership_snapshot = loaded
+                effective_paths += managed_paths
     except Exception:  # noqa: BLE001 - invalid hook configuration must deny Bash
         roots = ()
+        effective_paths = ()
         configuration_valid = False
     else:
         configuration_valid = True
@@ -647,7 +689,21 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             try:
-                decision = evaluate(event, protected_roots=roots)
+                decision = evaluate(event, protected_roots=effective_paths)
+                if (
+                    decision is None
+                    and event.get("tool_name") == "Bash"
+                    and managed_destination is not None
+                    and ownership_snapshot is not None
+                    and not _guard_ownership_matches(
+                        managed_destination,
+                        ownership_snapshot,
+                    )
+                ):
+                    decision = evaluate(
+                        event,
+                        protected_roots=(*roots, managed_destination),
+                    )
             except Exception:  # noqa: BLE001 - hook boundary must fail closed
                 decision = _deny(
                     "Guard evaluation failed; refusing Bash execution."

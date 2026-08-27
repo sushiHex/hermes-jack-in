@@ -191,6 +191,12 @@ For optional defense in depth, install and configure the packaged
 `hermes-jack-in-guard` as described in the
 [operator guide](docs/CLAUDE_CODE_GUIDE.md#4-protect-live-links). Every protected
 root must be supplied explicitly as an existing absolute physical directory.
+For a personal Claude skills directory with mixed ownership, use one
+`--managed-destination`: the guard validates its ownership manifest and protects
+the manifest plus exact managed children while leaving unmanaged siblings
+outside its authority. Missing, invalid, source-mismatched, nonregular, changed,
+or artifact-mismatched ownership evidence falls back to protecting that whole
+destination for the invocation.
 The guard is a bounded Claude Code hook, not access control: runtime-computed
 paths, another same-user process, or a compromised hook configuration remain
 outside its guarantee.

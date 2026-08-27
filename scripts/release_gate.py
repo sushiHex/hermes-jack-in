@@ -558,7 +558,8 @@ def _exercise_install(
         "---\nname: demo\ndescription: Installed artifact lifecycle canary.\n---\n\n# Demo\n",
         encoding="utf-8",
     )
-    sentinel = destination / "unmanaged-sentinel.txt"
+    sentinel = destination / "oracle" / "runner.py"
+    sentinel.parent.mkdir()
     sentinel.write_bytes(b"preserve-me")
     source_root = source.parent.resolve(strict=True)
     deny = run_guard_event(
@@ -602,6 +603,55 @@ def _exercise_install(
         cwd=fixture,
         env=env,
     )
+    mixed_guard = [
+        guard,
+        "--protected-root",
+        source_root,
+        "--managed-destination",
+        destination,
+    ]
+
+    def require_mixed_guard_denial(command: str, label: str) -> None:
+        decision = run_guard_event(
+            mixed_guard,
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "cwd": str(fixture),
+            },
+            cwd=fixture,
+            env=env,
+        )
+        output = decision.get("hookSpecificOutput") if decision is not None else None
+        if not isinstance(output, dict) or output.get("permissionDecision") != "deny":
+            raise RuntimeError(f"installed mixed guard did not deny {label}")
+
+    require_mixed_guard_denial(
+        f'rm -rf -- "{destination / "demo"}"',
+        "managed destination mutation",
+    )
+    require_mixed_guard_denial(
+        f'rm -f -- "{destination / ".hermes-claude-skills-adapter.json"}"',
+        "ownership manifest mutation",
+    )
+    require_mixed_guard_denial(
+        f'ls "$(touch "{source_root / "guard-probe"}")"',
+        "dynamic shell mutation",
+    )
+    mixed_allow = run_guard_event(
+        mixed_guard,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": f'python "{sentinel}" --help'},
+            "cwd": str(fixture),
+        },
+        cwd=fixture,
+        env=env,
+    )
+    if mixed_allow is not None:
+        raise RuntimeError("installed mixed guard denied an unmanaged sibling")
+    if (source_root / "guard-probe").exists():
+        raise RuntimeError("installed guard canary executed the dynamic shell probe")
     run(
         [console, "check", "--source", source_root, "--destination", destination, "--json"],
         cwd=fixture,
