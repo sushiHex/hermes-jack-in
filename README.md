@@ -78,6 +78,20 @@ The repository is public. No package has been published to PyPI; PyPI
 installation instructions will be added only after a package is actually
 published.
 
+## Working demo
+
+Run the disposable copy-mode demo from a development checkout:
+
+```bash
+uv sync --frozen
+uv run --frozen python scripts/demo.py
+```
+
+It creates temporary source and project-local destination trees, proves preview,
+installation, drift checking, no-op reconciliation, and owned removal, then
+cleans up automatically. It never touches personal Hermes or Claude skill
+directories.
+
 ## Safe first run
 
 Start with a project-local canary destination, not your personal Claude skills.

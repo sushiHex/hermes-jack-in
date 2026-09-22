@@ -61,6 +61,7 @@ SDIST_MEMBERS = {
     "docs/VALIDATION.md",
     "overrides.example.yaml",
     "pyproject.toml",
+    "scripts/demo.py",
     "scripts/protect_hermes_skills.py",
     "scripts/release_gate.py",
     "src/hermes_jack_in/__init__.py",

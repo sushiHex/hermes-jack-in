@@ -1,6 +1,9 @@
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -10,6 +13,7 @@ import pytest
 
 
 RELEASE_GATE = Path(__file__).parents[1] / "scripts" / "release_gate.py"
+DEMO = Path(__file__).parents[1] / "scripts" / "demo.py"
 BUILD_CONSTRAINTS = Path(__file__).resolve().parents[1] / "build-constraints.txt"
 EXPECTED_BUILD_REQUIREMENTS = {
     "hatchling": (
@@ -66,10 +70,34 @@ def load_release_gate():
     return module
 
 
+def test_disposable_demo_runs_the_public_cli() -> None:
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+
+    completed = subprocess.run(
+        [sys.executable, DEMO],
+        cwd=DEMO.parents[1],
+        env=environment,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stdout.rstrip().endswith("Hermes Jack-In demo: PASS")
+
+
 def test_release_gate_has_authoritative_lint_scope() -> None:
     release_gate = load_release_gate()
 
     assert release_gate.LINT_TARGETS == ("src", "tests", "scripts")
+
+
+def test_release_gate_allowlists_the_disposable_demo() -> None:
+    release_gate = load_release_gate()
+
+    assert "scripts/demo.py" in release_gate.SDIST_MEMBERS
 
 
 def test_release_gate_allowlists_the_feedback_contract_artifacts() -> None:
