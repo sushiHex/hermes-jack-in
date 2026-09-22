@@ -1,6 +1,9 @@
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -10,6 +13,7 @@ import pytest
 
 
 RELEASE_GATE = Path(__file__).parents[1] / "scripts" / "release_gate.py"
+DEMO = Path(__file__).parents[1] / "scripts" / "demo.py"
 BUILD_CONSTRAINTS = Path(__file__).resolve().parents[1] / "build-constraints.txt"
 EXPECTED_BUILD_REQUIREMENTS = {
     "hatchling": (
@@ -66,10 +70,71 @@ def load_release_gate():
     return module
 
 
+def load_demo():
+    spec = importlib.util.spec_from_file_location("demo", DEMO)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_disposable_demo_canonicalizes_its_temporary_root(
+    monkeypatch, tmp_path: Path
+) -> None:
+    demo = load_demo()
+    real_root = tmp_path / "real"
+    real_root.mkdir()
+    alias_parent = tmp_path / "alias"
+    alias_parent.mkdir()
+    noncanonical_root = alias_parent / ".." / real_root.name
+    observed: list[Path] = []
+
+    class FakeTemporaryDirectory:
+        def __init__(self, *, prefix: str) -> None:
+            assert prefix == "hermes-jack-in-demo-"
+
+        def __enter__(self) -> str:
+            return str(noncanonical_root)
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(demo.tempfile, "TemporaryDirectory", FakeTemporaryDirectory)
+    monkeypatch.setattr(demo, "_run_demo", observed.append)
+
+    assert demo.main() == 0
+    assert observed == [real_root.resolve(strict=True)]
+
+
+def test_disposable_demo_runs_the_public_cli() -> None:
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+
+    completed = subprocess.run(
+        [sys.executable, DEMO],
+        cwd=DEMO.parents[1],
+        env=environment,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stdout.rstrip().endswith("Hermes Jack-In demo: PASS")
+
+
 def test_release_gate_has_authoritative_lint_scope() -> None:
     release_gate = load_release_gate()
 
     assert release_gate.LINT_TARGETS == ("src", "tests", "scripts")
+
+
+def test_release_gate_allowlists_the_disposable_demo() -> None:
+    release_gate = load_release_gate()
+
+    assert "scripts/demo.py" in release_gate.SDIST_MEMBERS
 
 
 def test_release_gate_allowlists_the_feedback_contract_artifacts() -> None:
@@ -202,8 +267,8 @@ def test_build_constraints_pin_and_hash_the_backend_closure() -> None:
 
 def test_release_gate_requires_exact_wheel_and_sdist_names(tmp_path: Path) -> None:
     release_gate = load_release_gate()
-    wheel = tmp_path / "hermes_jack_in-0.2.0-py3-none-any.whl"
-    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
+    wheel = tmp_path / "hermes_jack_in-0.2.1-py3-none-any.whl"
+    sdist = tmp_path / "hermes_jack_in-0.2.1.tar.gz"
     wheel.touch()
     sdist.touch()
 
@@ -214,7 +279,7 @@ def test_release_gate_requires_exact_wheel_and_sdist_names(tmp_path: Path) -> No
         release_gate.built_artifacts(tmp_path)
 
     (tmp_path / "unrelated-name.whl").rename(wheel)
-    (tmp_path / "duplicate-0.2.0-py3-none-any.whl").touch()
+    (tmp_path / "duplicate-0.2.1-py3-none-any.whl").touch()
     with pytest.raises(RuntimeError, match="exactly one wheel and one sdist"):
         release_gate.built_artifacts(tmp_path)
 
@@ -298,7 +363,7 @@ def test_release_gate_rejects_unsafe_archive_member_names() -> None:
     ):
         with pytest.raises(RuntimeError):
             release_gate.validate_archive_member(name)
-    release_gate.validate_archive_member("hermes_jack_in-0.2.0/src/module.py")
+    release_gate.validate_archive_member("hermes_jack_in-0.2.1/src/module.py")
 
 
 def test_release_gate_rejects_duplicate_wheel_member_names(tmp_path: Path) -> None:
@@ -341,10 +406,10 @@ def test_public_sdist_allowlist_excludes_private_evidence() -> None:
 
 def test_public_sdist_rejects_unlisted_nested_evidence(tmp_path: Path) -> None:
     release_gate = load_release_gate()
-    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
+    sdist = tmp_path / "hermes_jack_in-0.2.1.tar.gz"
     payload = b"private audit\n"
     with tarfile.open(sdist, "w:gz") as archive:
-        member = tarfile.TarInfo("hermes_jack_in-0.2.0/docs/private-audit.md")
+        member = tarfile.TarInfo("hermes_jack_in-0.2.1/docs/private-audit.md")
         member.size = len(payload)
         import io
 
@@ -357,7 +422,7 @@ def test_public_sdist_rejects_unlisted_nested_evidence(tmp_path: Path) -> None:
 def _write_complete_test_sdist(release_gate, path: Path, extras: list[tarfile.TarInfo]) -> None:
     import io
 
-    root = "hermes_jack_in-0.2.0"
+    root = "hermes_jack_in-0.2.1"
     with tarfile.open(path, "w:gz") as archive:
         for relative in sorted(release_gate.SDIST_MEMBERS):
             payload = f"public fixture: {relative}\n".encode()
@@ -373,7 +438,7 @@ def _write_complete_test_sdist(release_gate, path: Path, extras: list[tarfile.Ta
 
 def test_public_sdist_rejects_members_outside_the_distribution_root(tmp_path: Path) -> None:
     release_gate = load_release_gate()
-    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
+    sdist = tmp_path / "hermes_jack_in-0.2.1.tar.gz"
     _write_complete_test_sdist(
         release_gate,
         sdist,
@@ -390,8 +455,8 @@ def test_public_sdist_rejects_link_members(
     member_type: bytes,
 ) -> None:
     release_gate = load_release_gate()
-    sdist = tmp_path / "hermes_jack_in-0.2.0.tar.gz"
-    link = tarfile.TarInfo("hermes_jack_in-0.2.0/docs/unlisted-link")
+    sdist = tmp_path / "hermes_jack_in-0.2.1.tar.gz"
+    link = tarfile.TarInfo("hermes_jack_in-0.2.1/docs/unlisted-link")
     link.type = member_type
     link.linkname = "../../outside"
     _write_complete_test_sdist(release_gate, sdist, [link])

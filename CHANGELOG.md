@@ -5,6 +5,14 @@ All notable changes to Hermes Jack-In are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-22
+
+### Added
+
+- Add a disposable public-CLI demo that proves copy-mode preview, installation,
+  drift checking, no-op reconciliation, owned removal, and preservation of an
+  unmanaged sibling without touching personal skill directories.
+
 ### Fixed
 
 - Scope the optional Claude Bash guard to mixed personal skill-tree ownership via
@@ -51,6 +59,7 @@ All notable changes to Hermes Jack-In are documented here. The project follows
 - Keep GitHub Actions on reviewed Node 24 releases while retaining immutable
   full-SHA pins, and use one `uv` Dependabot stream for Python dependencies.
 
-[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sushiHex/hermes-jack-in/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.2.1
 [0.2.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sushiHex/hermes-jack-in/releases/tag/v0.1.0
