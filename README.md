@@ -59,11 +59,11 @@ uv tool install git+https://github.com/sushiHex/hermes-jack-in.git
 For a reproducible install, use the reviewed tag after its release page exists:
 
 ```bash
-uv tool install git+https://github.com/sushiHex/hermes-jack-in.git@v0.2.0
+uv tool install git+https://github.com/sushiHex/hermes-jack-in.git@v0.2.1
 ```
 
-`v0.2.0` is distributed as a source-only GitHub prerelease. The release
-intentionally has no wheel or sdist assets.
+Once released, `v0.2.1` will be distributed as a source-only GitHub
+prerelease. The release intentionally has no wheel or sdist assets.
 
 For development:
 

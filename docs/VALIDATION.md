@@ -20,6 +20,19 @@ A version is releasable only when:
 6. public-history privacy, secret, license, metadata, and documentation audits
    have no blockers.
 
+## 0.2.1 prerelease evidence — 2026-09-22
+
+Version `0.2.1` is prepared as a source-only GitHub prerelease. It adds the
+disposable public-CLI demo and the ownership-scoped managed-destination guard
+while preserving fail-closed fallback for ambiguous or changing ownership
+evidence. No package is published to PyPI and no wheel or sdist is attached to
+the release.
+
+The release body is the authoritative dynamic evidence record. It must identify
+the exact tag target, local gate result, protected-main and tag CI URLs with all
+declared native matrix jobs passing, signed-tag verification, reproducible
+artifact hashes, and the sanitized real Claude Code managed-destination canary.
+
 ## 0.2.0 prerelease evidence — 2026-08-21
 
 Version `0.2.0` is prepared as a source-only GitHub prerelease. It adds the
