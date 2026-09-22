@@ -117,7 +117,7 @@ def _run_demo(root: Path) -> None:
 def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="hermes-jack-in-demo-") as temporary:
-            _run_demo(Path(temporary))
+            _run_demo(Path(temporary).resolve(strict=True))
     except DemoError as exc:
         print(f"Hermes Jack-In demo: FAIL: {exc}", file=sys.stderr)
         return 1

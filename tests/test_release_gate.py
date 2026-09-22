@@ -70,6 +70,43 @@ def load_release_gate():
     return module
 
 
+def load_demo():
+    spec = importlib.util.spec_from_file_location("demo", DEMO)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_disposable_demo_canonicalizes_its_temporary_root(
+    monkeypatch, tmp_path: Path
+) -> None:
+    demo = load_demo()
+    real_root = tmp_path / "real"
+    real_root.mkdir()
+    alias_parent = tmp_path / "alias"
+    alias_parent.mkdir()
+    noncanonical_root = alias_parent / ".." / real_root.name
+    observed: list[Path] = []
+
+    class FakeTemporaryDirectory:
+        def __init__(self, *, prefix: str) -> None:
+            assert prefix == "hermes-jack-in-demo-"
+
+        def __enter__(self) -> str:
+            return str(noncanonical_root)
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(demo.tempfile, "TemporaryDirectory", FakeTemporaryDirectory)
+    monkeypatch.setattr(demo, "_run_demo", observed.append)
+
+    assert demo.main() == 0
+    assert observed == [real_root.resolve(strict=True)]
+
+
 def test_disposable_demo_runs_the_public_cli() -> None:
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
